@@ -129,7 +129,7 @@ exports.getCheckout = (req, res, next) => {
                 line_items: products.map(p => {
                     return {
                         price_data:{
-                            currency: 'inr',
+                            currency: 'usd',
                             product_data:{
                                 name:p.productId.title,
                                 description:p.productId.description
