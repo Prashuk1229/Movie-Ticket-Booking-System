@@ -129,7 +129,7 @@ exports.getCheckout = (req, res, next) => {
                 line_items: products.map(p => {
                     return {
                         price_data:{
-                            currency: 'usd',
+                            currency: 'inr',
                             product_data:{
                                 name:p.productId.title,
                                 description:p.productId.description
@@ -279,7 +279,7 @@ exports.getInvoice = (req, res, next) => {
             totalSum += itemTotal;
 
             pdfDoc.fontSize(14).text(
-                `#${itemCount} ${product.product.title} (${product.quantity} x $${product.product.price.toFixed(2)}) = $${itemTotal.toFixed(2)}`,
+                `#${itemCount} ${product.product.title} (${product.quantity} x ₹${product.product.price.toFixed(2)}) = ₹${itemTotal.toFixed(2)}`,
                 { lineGap: 2 }
             );
             itemCount++;
@@ -289,7 +289,7 @@ exports.getInvoice = (req, res, next) => {
             lineGap: 5
         });
 
-        pdfDoc.fontSize(14).text(`Total Amount: $${totalSum.toFixed(2)}`, {
+        pdfDoc.fontSize(14).text(`Total Amount: ₹${totalSum.toFixed(2)}`, {
             align: 'right'
         });
 
