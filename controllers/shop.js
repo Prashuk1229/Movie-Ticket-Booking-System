@@ -4,40 +4,94 @@ const fs = require('fs');
 const path = require('path');
 const PDFDocument = require('pdfkit');
 const { title } = require('process');
+const redisClient = require('../app'); // ✅ Import Redis Client
+
 
 const stripe = require('stripe')('sk_test_51NDU6LSD5QYUJLGVtCfK7wDkJsUdPY13MlXMhFFpEpNAEJXH62jchvBi1BnvAbtNAwe5twenOghQl7YaVKFM2e3000WpAZPDGW');
 const perPage = 8;
 
-exports.getProducts = (req, res, next) => {
-    Product.find().sort({title:1})
-        .then(products => {
-            //   console.log(products);
-            res.render('shop/product-list', {
-                prods: products,
+exports.getProducts = async (req, res, next) => {
+    try {
+        if (!redisClient) {
+            throw new Error('Redis client is not initialized.');
+        }
+
+        console.log('🟡 Checking Redis Cache...');
+        const cachedMovies = await redisClient.v4.get('movies');
+
+        //console.log('🔵 Cached Data from Redis:', cachedMovies); // ✅ DEBUGGING LOG
+
+        if (cachedMovies) {
+            console.log('🚀 Serving from Redis Cache ✅');
+            return res.render('shop/product-list', {
+                prods: JSON.parse(cachedMovies), // ✅ Ensure JSON parsing is correct
                 pageTitle: 'All Movies',
                 path: '/products',
             });
-        })
-        .catch(err => {
-            console.log(err)
-            const error = new Error(err);
-            error.httpStatusCode = 500;
-            return next(error);
+        }
+
+        // ✅ 2. Fetch from MongoDB if Not Cached
+        console.log('📦 Fetching from MongoDB and storing in Redis...');
+        const products = await Product.find().sort({ title: 1 });
+
+        // ✅ 3. Store Data in Redis with Expiry Time (1 hour)
+        const cacheResult = await redisClient.v4.set('movies', JSON.stringify(products), { EX: 3600 });
+
+        if (cacheResult) {
+            console.log('✅ Successfully cached in Redis!');
+        } else {
+            console.log('❌ Failed to cache in Redis.');
+        }
+
+        res.render('shop/product-list', {
+            prods: products,
+            pageTitle: 'All Movies',
+            path: '/products',
         });
-}
-exports.getProduct = (req, res, next) => {
-    const prodId = req.params.productId;
-    Product.findById(prodId)
-        .then(product => {
-            res.render('shop/product-detail', {
-                product: product,
-                pageTitle: product.title,
+    } catch (err) {
+        console.error('❌ Error fetching products:', err);
+        next(err);
+    }
+};
+
+exports.getProduct = async (req, res, next) => {
+    try {
+        const prodId = req.params.productId;
+
+        // ✅ Check if the product exists in Redis Cache
+        const cachedProduct = await redisClient.v4.get(`product:${prodId}`);
+
+        if (cachedProduct) {
+            console.log(`🚀 Serving Product ${prodId} from Redis Cache`);
+            return res.render('shop/product-detail', {
+                product: JSON.parse(cachedProduct),
+                pageTitle: JSON.parse(cachedProduct).title,
                 path: '/products',
             });
-        })
-        .catch(err => {
-            console.log(err);
+        }
+
+        // ✅ If not in cache, fetch from MongoDB
+        console.log(`📦 Fetching Product ${prodId} from MongoDB`);
+        const product = await Product.findById(prodId);
+
+        if (!product) {
+            console.log(`❌ Product ${prodId} Not Found`);
+            return res.redirect('/products');
+        }
+
+        // ✅ Store the product in Redis with expiry (e.g., 1 hour)
+        await redisClient.v4.set(`product:${prodId}`, JSON.stringify(product), { EX: 3600 });
+
+        res.render('shop/product-detail', {
+            product: product,
+            pageTitle: product.title,
+            path: '/products',
         });
+
+    } catch (err) {
+        console.error('❌ Error fetching product:', err);
+        next(err);
+    }
 };
 
 exports.getIndex = (req, res, next) => {
